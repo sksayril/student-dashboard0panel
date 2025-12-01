@@ -4,6 +4,7 @@ import Dashboard from './components/Dashboard';
 import LoginPage from './components/LoginPage';
 import ConfirmModal from './components/ConfirmModal';
 import { ToastProvider, useToast } from './components/ToastContainer';
+import { api } from './api';
 import { studentData } from './data/mockData';
 
 function AppContent() {
@@ -62,26 +63,13 @@ function AppContent() {
     setIsLoggingOut(true);
     
     try {
-      const token = localStorage.getItem('authToken');
-      
-      // Only call logout API if user is not in demo mode
-      if (token && token !== 'demo-token') {
-        const response = await fetch('https://7bb3rgsz-3000.inc1.devtunnels.ms/api/students/logout', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
+      const result = await api.logout();
 
-        if (response.ok) {
-          showSuccess('Logged out successfully! 👋');
-        } else {
-          // Even if API fails, we'll log out locally
-          showInfo('Logged out from this device');
-        }
-      } else {
+      if (result.success) {
         showSuccess('Logged out successfully! 👋');
+      } else {
+        // Even if API fails, we'll log out locally
+        showInfo('Logged out from this device');
       }
     } catch (error) {
       console.error('Logout error:', error);

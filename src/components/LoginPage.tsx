@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Mail, Lock, User, Eye, EyeOff, GraduationCap, Phone, MapPin, Upload, Navigation } from 'lucide-react';
+import { Mail, Lock, User, Eye, EyeOff, GraduationCap, Phone, MapPin, Upload, Navigation, UserPlus } from 'lucide-react';
 import { useToast } from './ToastContainer';
+import { api } from '../api';
 
 interface LoginPageProps {
   onLogin: (userData: any) => void;
@@ -10,9 +11,18 @@ interface LoginPageProps {
 export default function LoginPage({ onLogin, onDemoLogin }: LoginPageProps) {
   const { showSuccess, showError } = useToast();
   const [isSignup, setIsSignup] = useState(false);
+  const [signupStep, setSignupStep] = useState(1);
+  const TOTAL_SIGNUP_STEPS = 3;
+
+  const LEVEL_OPTIONS = [
+    { id: 'beginner', label: 'Beginner', desc: 'Just getting started' },
+    { id: 'intermediate', label: 'Intermediate', desc: 'Some experience' },
+    { id: 'advanced', label: 'Advanced', desc: 'Confident & skilled' },
+  ] as const;
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
+  const [isFetchingPincode, setIsFetchingPincode] = useState(false);
   const [profileImage, setProfileImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
   const [formData, setFormData] = useState({
@@ -22,12 +32,32 @@ export default function LoginPage({ onLogin, onDemoLogin }: LoginPageProps) {
     confirmPassword: '',
     studentLevel: '',
     contactNumber: '',
+    agentId: '',
     areaname: '',
     city: '',
     pincode: '',
     latitude: '',
     longitude: '',
   });
+
+  const goToStep = (step: number) => {
+    setSignupStep(Math.min(TOTAL_SIGNUP_STEPS, Math.max(1, step)));
+  };
+
+  const handleNextStep = () => {
+    if (signupStep === 1) {
+      if (!formData.name || !formData.email || !formData.contactNumber || !formData.studentLevel) {
+        showError('Please fill all required details in this step before continuing.');
+        return;
+      }
+    }
+
+    goToStep(signupStep + 1);
+  };
+
+  const handlePrevStep = () => {
+    goToStep(signupStep - 1);
+  };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -89,6 +119,43 @@ export default function LoginPage({ onLogin, onDemoLogin }: LoginPageProps) {
     );
   };
 
+  const handlePincodeLookup = async () => {
+    const rawPincode = formData.pincode.trim();
+
+    // Only call API when a valid 6-digit PIN code is entered
+    if (!rawPincode || rawPincode.length !== 6 || !/^\d{6}$/.test(rawPincode)) {
+      return;
+    }
+
+    setIsFetchingPincode(true);
+    try {
+      const response = await fetch(`https://api.postalpincode.in/pincode/${rawPincode}`);
+      const data = await response.json();
+
+      const result = Array.isArray(data) ? data[0] : null;
+
+      if (result && result.Status === 'Success' && Array.isArray(result.PostOffice) && result.PostOffice.length > 0) {
+        const office = result.PostOffice[0];
+
+        setFormData((prev) => ({
+          ...prev,
+          areaname: office.Name || prev.areaname,
+          city: office.District || office.Region || prev.city,
+          pincode: rawPincode,
+        }));
+
+        showSuccess('PIN code found. Address auto-filled.');
+      } else {
+        showError('Could not find details for this PIN code. Please check and try again.');
+      }
+    } catch (error) {
+      console.error('Pincode lookup error:', error);
+      showError('Failed to fetch PIN code details. Please try again.');
+    } finally {
+      setIsFetchingPincode(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -101,22 +168,10 @@ export default function LoginPage({ onLogin, onDemoLogin }: LoginPageProps) {
       }
 
       try {
-        // Prepare form data for API
-        const apiFormData = new FormData();
-        apiFormData.append('name', formData.name);
-        apiFormData.append('email', formData.email);
-        apiFormData.append('password', formData.password);
-        apiFormData.append('contactNumber', formData.contactNumber);
-        apiFormData.append('studentLevel', formData.studentLevel);
-
-        // Add profile image if selected
-        if (profileImage) {
-          apiFormData.append('profileImage', profileImage);
-        }
-
-        // Add address only if all required fields including location are provided
+        // Prepare addresses if all fields are provided
+        let addresses;
         if (formData.areaname && formData.city && formData.pincode && formData.latitude && formData.longitude) {
-          const addresses = [{
+          addresses = [{
             areaname: formData.areaname,
             city: formData.city,
             pincode: formData.pincode,
@@ -125,20 +180,24 @@ export default function LoginPage({ onLogin, onDemoLogin }: LoginPageProps) {
               longitude: parseFloat(formData.longitude)
             }
           }];
-          apiFormData.append('addresses', JSON.stringify(addresses));
         }
 
         // Make API call for signup
-        const response = await fetch('https://7bb3rgsz-3000.inc1.devtunnels.ms/api/students/signup', {
-          method: 'POST',
-          body: apiFormData,
+        const result = await api.signup({
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          contactNumber: formData.contactNumber,
+          studentLevel: formData.studentLevel,
+          agentId: formData.agentId.trim() || undefined,
+          profileImage: profileImage || undefined,
+          addresses: addresses,
         });
 
-        const data = await response.json();
-
-        if (response.ok) {
+        if (result.success) {
           showSuccess('Account created successfully! Please login.');
           setIsSignup(false);
+          setSignupStep(1);
           setFormData({ 
             name: '', 
             email: '', 
@@ -146,6 +205,7 @@ export default function LoginPage({ onLogin, onDemoLogin }: LoginPageProps) {
             confirmPassword: '',
             studentLevel: '',
             contactNumber: '',
+            agentId: '',
             areaname: '',
             city: '',
             pincode: '',
@@ -155,7 +215,10 @@ export default function LoginPage({ onLogin, onDemoLogin }: LoginPageProps) {
           setProfileImage(null);
           setImagePreview('');
         } else {
-          showError(data.message || 'Signup failed. Please try again.');
+          const errorMessage = result.errors && result.errors.length > 0 
+            ? result.errors.join(', ') 
+            : result.message || 'Signup failed. Please try again.';
+          showError(errorMessage);
         }
       } catch (error) {
         console.error('Signup error:', error);
@@ -166,20 +229,9 @@ export default function LoginPage({ onLogin, onDemoLogin }: LoginPageProps) {
     } else {
       // Handle Login
       try {
-        const response = await fetch('https://7bb3rgsz-3000.inc1.devtunnels.ms/api/students/login', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email: formData.email,
-            password: formData.password,
-          }),
-        });
+        const result = await api.login(formData.email, formData.password);
 
-        const result = await response.json();
-
-        if (response.ok && result.success) {
+        if (result.success && result.data) {
           // Save token to localStorage
           localStorage.setItem('authToken', result.data.token);
           localStorage.setItem('userData', JSON.stringify(result.data));
@@ -190,7 +242,10 @@ export default function LoginPage({ onLogin, onDemoLogin }: LoginPageProps) {
           // Call onLogin with user data
           onLogin(result.data);
         } else {
-          showError(result.message || 'Login failed. Please check your credentials.');
+          const errorMessage = result.errors && result.errors.length > 0 
+            ? result.errors.join(', ') 
+            : result.message || 'Login failed. Please check your credentials.';
+          showError(errorMessage);
         }
       } catch (error) {
         console.error('Login error:', error);
@@ -253,7 +308,7 @@ export default function LoginPage({ onLogin, onDemoLogin }: LoginPageProps) {
 
         {/* Right Side - Login/Signup Form */}
         <div className="bg-white rounded-3xl shadow-2xl p-6 md:p-8 flex flex-col max-h-[85vh] overflow-hidden w-full">
-          <div className="mb-6 text-center flex-shrink-0">
+          <div className="mb-4 text-center flex-shrink-0">
             <h2 className="text-3xl font-bold text-gray-800 mb-2">
               {isSignup ? 'Create Account' : 'Welcome Back'}
             </h2>
@@ -264,9 +319,27 @@ export default function LoginPage({ onLogin, onDemoLogin }: LoginPageProps) {
             </p>
           </div>
 
+          {isSignup && (
+            <div className="mb-4 flex items-center justify-center gap-3 flex-shrink-0">
+              <span className="text-xs font-semibold text-blue-600">
+                Step {signupStep} of {TOTAL_SIGNUP_STEPS}
+              </span>
+              <div className="flex gap-1">
+                {[1, 2, 3].map((step) => (
+                  <span
+                    key={step}
+                    className={`h-1.5 w-6 rounded-full ${
+                      signupStep === step ? 'bg-blue-600' : 'bg-blue-200'
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-            <div className="space-y-4 overflow-y-auto overflow-x-hidden pr-2 pb-2 flex-1 custom-scrollbar">
-            {isSignup && (
+            <div className="space-y-4 overflow-y-auto pr-4 pb-3 flex-1 custom-scrollbar rounded-2xl bg-slate-50/60 px-4 pt-4">
+            {isSignup && signupStep === 1 && (
               <>
                 {/* Profile Image Upload */}
                 <div className="text-center">
@@ -316,25 +389,27 @@ export default function LoginPage({ onLogin, onDemoLogin }: LoginPageProps) {
             )}
 
             {/* Email */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email Address *
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
-                  placeholder="Enter your email"
-                  required
-                />
+            {(!isSignup || signupStep === 1) && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email Address *
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                    placeholder="Enter your email"
+                    required
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Contact Number - Only for Signup */}
-            {isSignup && (
+            {isSignup && signupStep === 1 && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Contact Number *
@@ -354,30 +429,79 @@ export default function LoginPage({ onLogin, onDemoLogin }: LoginPageProps) {
             )}
 
             {/* Student Level - Only for Signup (Required) */}
-            {isSignup && (
-              <div>
+            {isSignup && signupStep === 1 && (
+              <div className="space-y-3">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Student Level *
                 </label>
-                <div className="relative">
-                  <GraduationCap className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                  <select
-                    value={formData.studentLevel}
-                    onChange={(e) => setFormData({ ...formData, studentLevel: e.target.value })}
-                    className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all appearance-none bg-white"
-                    required={isSignup}
-                  >
-                    <option value="">Select your level</option>
-                    <option value="beginner">Beginner</option>
-                    <option value="intermediate">Intermediate</option>
-                    <option value="advanced">Advanced</option>
-                  </select>
+                <p className="text-xs text-gray-500">
+                  Choose your current experience level so we can personalize your learning journey.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {LEVEL_OPTIONS.map((level) => {
+                    const isSelected = formData.studentLevel === level.id;
+                    return (
+                      <button
+                        key={level.id}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, studentLevel: level.id })}
+                        className={`group relative flex flex-col items-start p-3 rounded-2xl border text-left transition-all duration-200 ease-out ${
+                          isSelected
+                            ? 'border-blue-500 bg-blue-50 shadow-sm ring-2 ring-blue-100'
+                            : 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50/60 hover:-translate-y-0.5 hover:shadow-md'
+                        }`}
+                        aria-pressed={isSelected}
+                      >
+                        <div className="flex items-center w-full mb-1 gap-2">
+                          <div
+                            className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                              isSelected ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-600'
+                            }`}
+                          >
+                            <GraduationCap size={16} />
+                          </div>
+                          <span
+                            className={`text-sm font-semibold ${
+                              isSelected ? 'text-blue-700' : 'text-gray-800'
+                            }`}
+                          >
+                            {level.label}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 group-hover:text-gray-600">
+                          {level.desc}
+                        </p>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
 
+            {/* Agent Code / Referral Code - Only for Signup (Optional) */}
+            {isSignup && signupStep === 1 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Agent/Referral Code (Optional)
+                </label>
+                <div className="relative">
+                  <UserPlus className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                  <input
+                    type="text"
+                    value={formData.agentId}
+                    onChange={(e) => setFormData({ ...formData, agentId: e.target.value })}
+                    className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                    placeholder="Enter agent/referral code if you have one"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  If you were referred by an agent, enter their code here
+                </p>
+              </div>
+            )}
+
             {/* Address Fields - Only for Signup (Optional but if provided, all fields required) */}
-            {isSignup && (
+            {isSignup && signupStep === 2 && (
               <div className="space-y-3">
                 <label className="block text-sm font-medium text-gray-700">
                   Address (Optional - Fill all fields if providing address)
@@ -403,14 +527,28 @@ export default function LoginPage({ onLogin, onDemoLogin }: LoginPageProps) {
                     />
                   </div>
                 </div>
-                <div className="relative">
+                <div className="relative flex gap-2">
                   <input
                     type="text"
                     value={formData.pincode}
                     onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
+                    onBlur={handlePincodeLookup}
+                    maxLength={6}
                     className="w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-sm"
-                    placeholder="Pincode"
+                    placeholder="Pincode (e.g. 110001)"
                   />
+                  <button
+                    type="button"
+                    onClick={handlePincodeLookup}
+                    disabled={isFetchingPincode}
+                    className={`px-3 py-2.5 rounded-xl text-xs font-semibold border transition-all whitespace-nowrap ${
+                      isFetchingPincode
+                        ? 'border-gray-300 text-gray-400 cursor-not-allowed'
+                        : 'border-blue-500 text-blue-600 hover:bg-blue-50'
+                    }`}
+                  >
+                    {isFetchingPincode ? 'Fetching...' : 'Lookup'}
+                  </button>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -459,32 +597,34 @@ export default function LoginPage({ onLogin, onDemoLogin }: LoginPageProps) {
             )}
 
             {/* Password */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Password *
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full pl-12 pr-12 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
-                  placeholder="Enter your password"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                </button>
+            {(!isSignup || signupStep === 3) && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Password *
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    className="w-full pl-12 pr-12 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                    placeholder="Enter your password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Confirm Password - Only for Signup */}
-            {isSignup && (
+            {isSignup && signupStep === 3 && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Confirm Password *
@@ -517,25 +657,61 @@ export default function LoginPage({ onLogin, onDemoLogin }: LoginPageProps) {
             </div>
 
             <div className="mt-5 space-y-4 flex-shrink-0">
-            <button
-              type="submit"
-              disabled={isLoading}
-              className={`w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all ${
-                isLoading ? 'opacity-70 cursor-not-allowed' : 'hover:scale-105'
-              }`}
-            >
-              {isLoading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Processing...
-                </span>
-              ) : (
-                isSignup ? 'Create Account' : 'Sign In'
-              )}
-            </button>
+            {isSignup ? (
+              <div className="flex items-center gap-3">
+                {signupStep > 1 && (
+                  <button
+                    type="button"
+                    onClick={handlePrevStep}
+                    className="w-1/3 px-4 py-3 rounded-xl border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 transition-all"
+                  >
+                    Back
+                  </button>
+                )}
+                <button
+                  type={signupStep === TOTAL_SIGNUP_STEPS ? 'submit' : 'button'}
+                  onClick={signupStep === TOTAL_SIGNUP_STEPS ? undefined : handleNextStep}
+                  disabled={isLoading}
+                  className={`flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all ${
+                    isLoading ? 'opacity-70 cursor-not-allowed' : 'hover:scale-105'
+                  }`}
+                >
+                  {isLoading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Processing...
+                    </span>
+                  ) : signupStep === TOTAL_SIGNUP_STEPS ? (
+                    'Create Account'
+                  ) : (
+                    'Next'
+                  )}
+                </button>
+              </div>
+            ) : (
+              <button
+                type="submit"
+                disabled={isLoading}
+                className={`w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all ${
+                  isLoading ? 'opacity-70 cursor-not-allowed' : 'hover:scale-105'
+                }`}
+              >
+                {isLoading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Processing...
+                  </span>
+                ) : (
+                  'Sign In'
+                )}
+              </button>
+            )}
 
             {!isSignup && (
               <>
@@ -567,6 +743,7 @@ export default function LoginPage({ onLogin, onDemoLogin }: LoginPageProps) {
               <button
                 onClick={() => {
                   setIsSignup(!isSignup);
+                  setSignupStep(1);
                   setFormData({ 
                     name: '', 
                     email: '', 
@@ -574,6 +751,7 @@ export default function LoginPage({ onLogin, onDemoLogin }: LoginPageProps) {
                     confirmPassword: '',
                     studentLevel: '',
                     contactNumber: '',
+                    agentId: '',
                     areaname: '',
                     city: '',
                     pincode: '',
