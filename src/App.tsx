@@ -1,14 +1,23 @@
 import { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
+import Courses from './components/Courses';
+import EnrolledCourses from './components/EnrolledCourses';
+import CourseDetail from './components/CourseDetail';
+import Profile from './components/Profile';
+import SubscriptionPage from './components/Subscription';
+import Analytics from './components/Analytics';
 import LoginPage from './components/LoginPage';
 import ConfirmModal from './components/ConfirmModal';
+import Watermark from './components/Watermark';
 import { ToastProvider, useToast } from './components/ToastContainer';
 import { api } from './api';
 import { studentData } from './data/mockData';
+import { User } from './api/types';
 
 function AppContent() {
   const [currentView, setCurrentView] = useState('dashboard');
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userData, setUserData] = useState<any>(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -84,6 +93,7 @@ function AppContent() {
       setIsAuthenticated(false);
       setUserData(null);
       setCurrentView('dashboard');
+      setSelectedCourseId(null);
       setShowLogoutModal(false);
       setIsLoggingOut(false);
     }
@@ -91,6 +101,20 @@ function AppContent() {
 
   const handleLogoutCancel = () => {
     setShowLogoutModal(false);
+  };
+
+  const handleCourseClick = (courseId: string) => {
+    setSelectedCourseId(courseId);
+    setCurrentView('course-detail');
+  };
+
+  const handleBackToCourses = () => {
+    setSelectedCourseId(null);
+    setCurrentView('courses');
+  };
+
+  const handleProfileUpdate = (updatedData: User) => {
+    setUserData(updatedData);
   };
 
   if (!isAuthenticated) {
@@ -110,60 +134,56 @@ function AppContent() {
         type="warning"
       />
       
-      <div className="flex min-h-screen bg-blue-50">
+      <div className="flex min-h-screen bg-blue-50 relative">
+        <Watermark text="AG" opacity={0.03} fontSize="15rem" />
         <Sidebar currentView={currentView} onViewChange={setCurrentView} onLogout={handleLogoutClick} userData={userData} />
-      <div className="flex-1" style={{ marginLeft: '80px' }}>
-        {currentView === 'dashboard' && <Dashboard data={studentData} userData={userData} />}
+      <div className="flex-1 relative" style={{ marginLeft: '80px' }}>
+        {currentView === 'dashboard' && (
+          <Dashboard 
+            data={studentData} 
+            userData={userData}
+            onCourseClick={handleCourseClick}
+          />
+        )}
+        {currentView === 'courses' && <Courses userData={userData} onCourseClick={handleCourseClick} onNavigateToEnrolled={() => setCurrentView('enrolled-courses')} />}
+        {currentView === 'enrolled-courses' && (
+          <EnrolledCourses 
+            userData={userData} 
+            onCourseClick={handleCourseClick}
+            onNavigateToAvailable={() => setCurrentView('courses')}
+          />
+        )}
+        {currentView === 'course-detail' && selectedCourseId && (
+          <CourseDetail 
+            courseId={selectedCourseId} 
+            userData={userData} 
+            onBack={() => {
+              // Go back to the previous view
+              setCurrentView('courses');
+              setSelectedCourseId(null);
+            }}
+            onEnrollmentSuccess={() => {
+              // Optionally navigate to enrolled courses after enrollment
+              // setCurrentView('enrolled-courses');
+            }}
+          />
+        )}
         {currentView === 'analytics' && (
-          <div className="flex items-center justify-center h-screen">
-            <p className="text-gray-500 text-xl">Analytics View Coming Soon</p>
-          </div>
+          <Analytics userData={userData} />
         )}
         {currentView === 'messages' && (
           <div className="flex items-center justify-center h-screen">
             <p className="text-gray-500 text-xl">Messages View Coming Soon</p>
           </div>
         )}
+        {currentView === 'subscription' && (
+          <SubscriptionPage userData={userData} />
+        )}
         {currentView === 'settings' && (
-          <div className="flex items-center justify-center h-screen bg-blue-900">
-            <div className="bg-white rounded-3xl p-8 shadow-xl max-w-md w-full mx-4">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">Account Settings</h2>
-              {userData && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between py-3 border-b">
-                    <span className="text-gray-600">Name:</span>
-                    <span className="font-semibold text-gray-800">{userData.name}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-3 border-b">
-                    <span className="text-gray-600">Email:</span>
-                    <span className="font-semibold text-gray-800">{userData.email}</span>
-                  </div>
-                  {userData.contactNumber && (
-                    <div className="flex items-center justify-between py-3 border-b">
-                      <span className="text-gray-600">Contact:</span>
-                      <span className="font-semibold text-gray-800">{userData.contactNumber}</span>
-                    </div>
-                  )}
-                  {userData.studentLevel && (
-                    <div className="flex items-center justify-between py-3 border-b">
-                      <span className="text-gray-600">Level:</span>
-                      <span className="font-semibold text-gray-800">{userData.studentLevel.name || userData.studentLevel}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between py-3 border-b">
-                    <span className="text-gray-600">Role:</span>
-                    <span className="font-semibold text-blue-600 capitalize">{userData.role}</span>
-                  </div>
-                  {userData.lastLogin && (
-                    <div className="flex items-center justify-between py-3">
-                      <span className="text-gray-600">Last Login:</span>
-                      <span className="font-semibold text-gray-800">{new Date(userData.lastLogin).toLocaleString()}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
+          <Profile 
+            userData={userData}
+            onProfileUpdate={handleProfileUpdate}
+          />
         )}
       </div>
       </div>

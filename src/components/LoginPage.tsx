@@ -15,7 +15,7 @@ export default function LoginPage({ onLogin, onDemoLogin }: LoginPageProps) {
   const TOTAL_SIGNUP_STEPS = 3;
 
   const LEVEL_OPTIONS = [
-    { id: 'beginner', label: 'Beginner', desc: 'Just getting started' },
+    { id: 'junior', label: 'Junior', desc: 'Building foundation' },
     { id: 'intermediate', label: 'Intermediate', desc: 'Some experience' },
     { id: 'advanced', label: 'Advanced', desc: 'Confident & skilled' },
   ] as const;

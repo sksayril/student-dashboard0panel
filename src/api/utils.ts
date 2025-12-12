@@ -97,8 +97,11 @@ export const fetchWithTimeout = async (
     return response;
   } catch (error) {
     clearTimeout(timeoutId);
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('Request timeout. Please try again.');
+    // Handle AbortError (timeout) - convert to a more user-friendly error
+    if (error instanceof Error && (error.name === 'AbortError' || error.message === 'signal is aborted without reason')) {
+      const timeoutError = new Error('Request timeout. Please try again.');
+      timeoutError.name = 'TimeoutError';
+      throw timeoutError;
     }
     throw error;
   }
@@ -108,10 +111,10 @@ export const fetchWithTimeout = async (
  * Handle network errors
  */
 export const handleNetworkError = (error: unknown): ApiResponse => {
-  console.error('Network error:', error);
-
+  // Don't log timeout errors as they're expected when API is unavailable
   if (error instanceof Error) {
-    if (error.message.includes('timeout')) {
+    if (error.message.includes('timeout') || error.name === 'TimeoutError') {
+      // Silently return timeout error - don't log to console
       return {
         success: false,
         message: 'Request timeout. Please check your connection and try again.',
@@ -120,6 +123,8 @@ export const handleNetworkError = (error: unknown): ApiResponse => {
     }
 
     if (error.message.includes('Failed to fetch')) {
+      // Only log non-timeout network errors
+      console.warn('Network error:', error.message);
       return {
         success: false,
         message: 'Network error. Please check your internet connection.',
@@ -128,6 +133,8 @@ export const handleNetworkError = (error: unknown): ApiResponse => {
     }
   }
 
+  // Only log unexpected errors
+  console.error('Unexpected network error:', error);
   return {
     success: false,
     message: 'An unexpected error occurred. Please try again.',

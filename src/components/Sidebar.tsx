@@ -1,4 +1,4 @@
-import { LayoutGrid, BarChart3, MessageSquare, Settings, LogOut } from 'lucide-react';
+import { LayoutGrid, BarChart3, MessageSquare, Settings, LogOut, BookOpen, Crown } from 'lucide-react';
 import { useState } from 'react';
 
 interface SidebarProps {
@@ -13,6 +13,8 @@ export default function Sidebar({ currentView, onViewChange, onLogout, userData 
 
   const menuItems = [
     { id: 'dashboard', icon: LayoutGrid, label: 'Dashboard' },
+    { id: 'courses', icon: BookOpen, label: 'Courses' },
+    { id: 'subscription', icon: Crown, label: 'Subscription' },
     { id: 'analytics', icon: BarChart3, label: 'Analytics' },
     { id: 'messages', icon: MessageSquare, label: 'Messages' },
     { id: 'settings', icon: Settings, label: 'Settings' },

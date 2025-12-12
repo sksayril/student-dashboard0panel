@@ -4,7 +4,7 @@
  */
 
 // API Base URL
-export const API_BASE_URL = 'https://7bb3rgsz-3000.inc1.devtunnels.ms';
+export const API_BASE_URL = 'https://7cvccltb-3023.inc1.devtunnels.ms';
 
 // API Endpoints
 export const API_ENDPOINTS = {
@@ -15,6 +15,34 @@ export const API_ENDPOINTS = {
     LOGOUT: '/api/students/logout',
     PROFILE: '/api/students/profile',
     UPDATE_PROFILE: '/api/students/profile',
+  },
+  // Course endpoints
+  COURSES: {
+    FILTERS: '/api/student/courses/filters',
+    DETAILS: '/api/student/courses', // Will append /:courseId
+    LESSONS: '/api/student/courses', // Will append /:courseId/lessons
+    ENROLL: '/api/student/courses', // Will append /:courseId/enroll
+    ENROLLED: '/api/student/courses',
+    ENROLLED_WITH_PROGRESS: '/api/student/courses/with-progress',
+    PROGRESS: '/api/student/courses', // Will append /:courseId/progress
+    DASHBOARD: '/api/student/courses/dashboard',
+  },
+  // Subscription endpoints
+  SUBSCRIPTION: {
+    MY_SUBSCRIPTIONS: '/api/student/subscription/my-subscriptions',
+    ACTIVE: '/api/student/subscription/active',
+    PLANS: '/api/student/subscription/plans',
+    CREATE_ORDER: '/api/student/subscription/create-order',
+    VERIFY_PAYMENT: '/api/student/subscription/verify-payment',
+  },
+  // Location endpoints
+  LOCATION: {
+    UPDATE: '/api/location/update',
+    CURRENT: '/api/location/current',
+    HISTORY: '/api/location/history',
+    NEARBY: '/api/location/nearby',
+    STOP: '/api/location/stop',
+    ACTIVE: '/api/location/active',
   },
 } as const;
 

@@ -5,7 +5,7 @@
 
 import { API_BASE_URL, API_ENDPOINTS } from '../config';
 import { buildHeaders, handleResponse, handleNetworkError, fetchWithTimeout, isDemoMode } from '../utils';
-import { ApiResponse, SignupRequest, LoginRequest, LoginResponse } from '../types';
+import { ApiResponse, SignupRequest, LoginRequest, LoginResponse, UpdateProfileRequest } from '../types';
 
 /**
  * Student API endpoints
@@ -132,8 +132,9 @@ export const studentApi = {
   /**
    * Update Student Profile
    * Updates the current student's profile
+   * Supports both JSON and multipart/form-data (for image uploads)
    */
-  updateProfile: async (profileData: Partial<SignupRequest>): Promise<ApiResponse<LoginResponse>> => {
+  updateProfile: async (profileData: UpdateProfileRequest): Promise<ApiResponse<LoginResponse>> => {
     try {
       if (isDemoMode()) {
         return {
@@ -143,25 +144,54 @@ export const studentApi = {
         };
       }
 
-      const formData = new FormData();
+      // Check if profileImage is a File (needs multipart/form-data)
+      const hasFileUpload = profileData.profileImage instanceof File;
       
-      if (profileData.name) formData.append('name', profileData.name);
-      if (profileData.email) formData.append('email', profileData.email);
-      if (profileData.contactNumber) formData.append('contactNumber', profileData.contactNumber);
-      if (profileData.studentLevel) formData.append('studentLevel', profileData.studentLevel);
-      if (profileData.profileImage) formData.append('profileImage', profileData.profileImage);
-      if (profileData.addresses) {
-        formData.append('addresses', JSON.stringify(profileData.addresses));
+      if (hasFileUpload) {
+        // Use FormData for file uploads
+        const formData = new FormData();
+        
+        if (profileData.name) formData.append('name', profileData.name);
+        if (profileData.contactNumber) formData.append('contactNumber', profileData.contactNumber);
+        if (profileData.studentLevel) formData.append('studentLevel', profileData.studentLevel);
+        if (profileData.profileImage instanceof File) {
+          formData.append('profileImage', profileData.profileImage);
+        }
+        if (profileData.addresses && profileData.addresses.length > 0) {
+          formData.append('addresses', JSON.stringify(profileData.addresses));
+        }
+
+        const url = `${API_BASE_URL}${API_ENDPOINTS.STUDENTS.UPDATE_PROFILE}`;
+        const response = await fetchWithTimeout(url, {
+          method: 'POST',
+          headers: buildHeaders(true, 'multipart/form-data'),
+          body: formData,
+        });
+
+        return handleResponse<LoginResponse>(response);
+      } else {
+        // Use JSON for non-file updates
+        const jsonData: any = {};
+        
+        if (profileData.name) jsonData.name = profileData.name;
+        if (profileData.contactNumber) jsonData.contactNumber = profileData.contactNumber;
+        if (profileData.studentLevel) jsonData.studentLevel = profileData.studentLevel;
+        if (typeof profileData.profileImage === 'string') {
+          jsonData.profileImage = profileData.profileImage;
+        }
+        if (profileData.addresses && profileData.addresses.length > 0) {
+          jsonData.addresses = profileData.addresses;
+        }
+
+        const url = `${API_BASE_URL}${API_ENDPOINTS.STUDENTS.UPDATE_PROFILE}`;
+        const response = await fetchWithTimeout(url, {
+          method: 'POST',
+          headers: buildHeaders(true),
+          body: JSON.stringify(jsonData),
+        });
+
+        return handleResponse<LoginResponse>(response);
       }
-
-      const url = `${API_BASE_URL}${API_ENDPOINTS.STUDENTS.UPDATE_PROFILE}`;
-      const response = await fetchWithTimeout(url, {
-        method: 'PUT',
-        headers: buildHeaders(true, 'multipart/form-data'),
-        body: formData,
-      });
-
-      return handleResponse<LoginResponse>(response);
     } catch (error) {
       return handleNetworkError(error);
     }
