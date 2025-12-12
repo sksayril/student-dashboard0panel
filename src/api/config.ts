@@ -4,7 +4,8 @@
  */
 
 // API Base URL
-export const API_BASE_URL = 'https://7cvccltb-3023.inc1.devtunnels.ms';
+// export const API_BASE_URL = 'https://7cvccltb-3023.inc1.devtunnels.ms';
+export const API_BASE_URL = 'https://api.adhyan.guru';
 
 // API Endpoints
 export const API_ENDPOINTS = {
